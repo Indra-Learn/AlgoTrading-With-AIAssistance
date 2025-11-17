@@ -4,11 +4,16 @@ import sys
 from pathlib import Path
 import requests
 import pandas as pd
+import numpy as np
+
 
 sys.path.append(str(Path(os.getcwd()).parent.absolute()))
 
 
 class NSE_API():
+    """
+    helps to fetch data from NSE API
+    """
     base_nse_url = "https://www.nseindia.com/"
     nse_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     def __init__(self):
@@ -32,47 +37,28 @@ class NSE_API():
         return output
 
 
-def load_etf_data():
-    # Call NSE API for ETF analysis
-    nse = NSE_API()
-    daily_nse_etf_data = nse._get_data("api/etf")
-
-    # Process ETFs Data
-    df_daily_etf_data = pd.DataFrame(daily_nse_etf_data.get('data'))
-
-    # 'nav', 'ypc', 'mpc', 'xdt', 'cact', 'nearWKH', 'nearWKL'
-    df_daily_etf_data_new = df_daily_etf_data.loc[:, ['symbol', 'assets', 'open', 'high', 'low', 'ltP', 'per', 'prevClose', 'qty', 'trdVal', 'wkhi', 'wklo', 'perChange365d', 'perChange30d']].copy()
-
-    df_daily_etf_data_new['company_name'] = df_daily_etf_data['meta'].apply(lambda x: x.get('companyName'))
-
-    df_daily_etf_data_new.rename(columns={'assets': 'underlying_asset', 
-                                        'ltp': 'last_traded_price', 
-                                        'per': 'percentage_change',
-                                        'prevClose': 'previous_close',
-                                        'qty': 'volume',
-                                        'trdVal': 'value', 
-                                        'wkhi': '52_week_high', 
-                                        'wklo': '52_week_low',
-                                        'perChange365d': 'yearly_percentage_change',
-                                        'perChange30d': 'monthly_percentage_change'}, inplace=True)
-    
-    df_daily_etf_data_filtered = df_daily_etf_data_new[(df_daily_etf_data_new['underlying_asset'].str.contains('Nifty', case=False, na=False)) & ((df_daily_etf_data_new['company_name'].str.contains('Motilal Oswal Mutual Fund', case=False, na=False)) | (df_daily_etf_data_new['company_name'].str.contains('DSP Mutual Fund', case=False, na=False)) | (df_daily_etf_data_new['company_name'].str.contains('ICICI Prudential Mutual Fund', case=False, na=False)) | (df_daily_etf_data_new['company_name'].str.contains('Nippon India Mutual Fund', case=False, na=False)) | (df_daily_etf_data_new['company_name'].str.contains('Aditya Birla Sun Life Mutual Fund', case=False, na=False)) | (df_daily_etf_data_new['company_name'].str.contains('AXIS MUTUAL FUND', case=False, na=False)) | (df_daily_etf_data_new['company_name'].str.contains('Mirae Asset Mutual Fund', case=False, na=False)))]
-
-    return df_daily_etf_data_filtered.reset_index(drop=True)
-
-
-def get_nse_etf_data():
+def get_nse_etf_data(symbol: str=None):
+    """
+    this function
+    other nse api endpoints:
+        - https://www.nseindia.com/api/etf
+        - https://www.nseindia.com/api/quote-equity?symbol=GROWWDEFNC
+        - https://www.nseindia.com/api/quote-equity?symbol=GROWWDEFNC&section=trade_info
+    """
     nse_api = NSE_API()
     daily_nse_all_etfs_data = nse_api._get_data("api/etf").get('data')
 
     out = list()
     for item in daily_nse_all_etfs_data:
-        # if item.get('symbol') != 'MODEFENCE':
-        #     break
+        if symbol is not None and item.get('symbol') != symbol:
+            continue
         empty_dict = dict()
         etf_data = nse_api._get_data(f"api/quote-equity?symbol={item.get('symbol')}")
+
+        # # imp: below code will be useful for further block deal and market depth data
         # etf_trade_info_data = nse_api._get_data(f"api/quote-equity?symbol={item.get('symbol')}&section=trade_info")
         # print(etf_trade_info_data)
+
         empty_dict['symbol'] = item.get('symbol')
 
         # empty_dict['symbol'] = etf_data.get('info').get('symbol')
@@ -87,6 +73,7 @@ def get_nse_etf_data():
         empty_dict['surveillance'] = etf_data.get('securityInfo').get('surveillance').get('surv')
         empty_dict['face_value'] = etf_data.get('securityInfo').get('faceValue')
         empty_dict['issued_size'] = etf_data.get('securityInfo').get('issuedSize')
+        empty_dict['expense_ratio'] = np.nan
 
         empty_dict['toal_market_cap'] = round((etf_data.get('securityInfo').get('issuedSize') * etf_data.get('priceInfo').get('lastPrice')) / 10000000, 2)
 
@@ -119,5 +106,52 @@ def get_nse_etf_data():
     return out_df.reset_index(drop=True)
 
 
+def get_nse_etf_data_ohlc(symbol: str, from_dt: str=None, to_dt: str=None):
+    """
+    this function
+    other nse api endpoints:
+        - https://www.nseindia.com/api/historicalOR/cm/equity?symbol=MODEFENCE
+        - https://www.nseindia.com/api/historicalOR/generateSecurityWiseHistoricalData?from=17-11-2024&to=17-11-2025&symbol=MODEFENCE&type=priceVolumeDeliverable&series=ALL 
+    """
+    nse_api = NSE_API()
+    if from_dt is None or to_dt is None:
+        etf_data_monthly_ohlc = nse_api._get_data(f'api/historicalOR/cm/equity?symbol={symbol}')
+
+        etf_data_monthly_ohlc_df = pd.DataFrame(etf_data_monthly_ohlc.get('data'))
+
+        etf_data_monthly_ohlc_df.drop(columns=['CH_SERIES', 'TIMESTAMP', 'mTIMESTAMP', 'CH_TOT_TRADED_VAL', 'CH_52WEEK_HIGH_PRICE',	'CH_52WEEK_LOW_PRICE', 'SLBMH_TOT_VAL'], inplace=True)
+
+        etf_data_monthly_ohlc_df.rename(columns={'CH_SYMBOL': 'symbol', 'CH_TIMESTAMP': 'timestamp', 'CH_PREVIOUS_CLS_PRICE': 'previous_close', 'CH_OPENING_PRICE': 'open', 'CH_TRADE_HIGH_PRICE': 'high', 'CH_TRADE_LOW_PRICE': 'low', 'CH_LAST_TRADED_PRICE': 'close', 'CH_CLOSING_PRICE': 'ltp', 'VWAP': 'vwap', 'CH_TOT_TRADED_QTY': 'volume', 'CH_TOTAL_TRADES': 'trades'}, inplace=True)
+
+        etf_data_monthly_ohlc_df['timestamp'] = pd.to_datetime(etf_data_monthly_ohlc_df['timestamp'], format='%Y-%m-%d')
+
+    elif from_dt is not None and to_dt is not None:
+        etf_data_monthly_ohlc = nse_api._get_data(f'api/historicalOR/generateSecurityWiseHistoricalData?from={from_dt}&to={to_dt}&symbol={symbol}&type=priceVolumeDeliverable&series=ALL')
+
+        etf_data_monthly_ohlc_df = pd.DataFrame(etf_data_monthly_ohlc.get('data'))
+
+        etf_data_monthly_ohlc_df.drop(columns=['CH_SERIES', 'mTIMESTAMP', 'CH_TOT_TRADED_VAL', 'COP_DELIV_QTY', 'COP_DELIV_PERC'], inplace=True)
+
+        etf_data_monthly_ohlc_df.rename(columns={'CH_SYMBOL': 'symbol', 'CH_TIMESTAMP': 'timestamp', 'CH_PREVIOUS_CLS_PRICE': 'previous_close', 'CH_OPENING_PRICE': 'open', 'CH_TRADE_HIGH_PRICE': 'high', 'CH_TRADE_LOW_PRICE': 'low', 'CH_LAST_TRADED_PRICE': 'close', 'CH_CLOSING_PRICE': 'ltp', 'VWAP': 'vwap', 'CH_TOT_TRADED_QTY': 'volume', 'CH_TOTAL_TRADES': 'trades'}, inplace=True)
+
+    return etf_data_monthly_ohlc_df
+
+
+def load_etf_data():
+    final_etf_df_new = get_nse_etf_data().copy()
+
+    final_etf_df_new_filtered = final_etf_df_new[(final_etf_df_new['asset_company'].str.contains('Motilal Oswal Mutual Fund', case=False, na=False)) | (final_etf_df_new['asset_company'].str.contains('DSP Mutual Fund', case=False, na=False)) | (final_etf_df_new['asset_company'].str.contains('ICICI Prudential Mutual Fund', case=False, na=False)) | (final_etf_df_new['asset_company'].str.contains('Nippon India Mutual Fund', case=False, na=False)) | (final_etf_df_new['asset_company'].str.contains('Aditya Birla Sun Life Mutual Fund', case=False, na=False)) | (final_etf_df_new['asset_company'].str.contains('AXIS MUTUAL FUND', case=False, na=False)) | (final_etf_df_new['asset_company'].str.contains('Mirae Asset Mutual Fund', case=False, na=False))]
+
+    return final_etf_df_new_filtered.reset_index(drop=True)
+
+
+
 if __name__ == '__main__':
-    df_daily_etf_data_filtered = get_nse_etf_data()
+    # out = get_nse_etf_data()
+    # out = get_nse_etf_data(symbol='MODEFENCE')
+
+    # out = get_nse_etf_data_ohlc(symbol='MODEFENCE')
+    out = get_nse_etf_data_ohlc(symbol='MODEFENCE', from_dt='17-11-2024', to_dt='17-11-2025')
+
+    print(out)
+
