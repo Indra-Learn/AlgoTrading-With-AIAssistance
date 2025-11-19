@@ -1,7 +1,31 @@
+"""
+1. https://www.nseindia.com/api/marketStatus
+2. https://www.nseindia.com/api/othermarketStatus?market=CMOT
+
+3. Graph Trade data: https://www.nseindia.com/api/chart-databyindex-dynamic?index=GROWWDEFNCEQN&type=symbol
+4. corporate info: https://www.nseindia.com/api/top-corp-info?symbol=GROWWDEFNC&market=equities&series=EQ
+5. serv: https://www.nseindia.com/api/regulation/serv?symbol=GROWWDEFNC&series=EQ
+
+6. Market Turnover: https://www.nseindia.com/api/NextApi/apiClient?functionName=getMarketTurnoverSummary
+
+1. All Index data daily: https://www.nseindia.com/api/NextApi/apiClient?functionName=getIndexData&&type=All
+1. all indices: https://www.nseindia.com/api/NextApi/apiClient/homeApi?functionName=getIndicesData
+
+2. Gift Nifty: https://www.nseindia.com/api/NextApi/apiClient?functionName=getGiftNifty
+3. market turnover: https://www.nseindia.com/api/NextApi/apiClient?functionName=getMarketTurnover
+4. market turnover summary: https://www.nseindia.com/api/NextApi/apiClient?functionName=getMarketTurnoverSummary
+5. market statistics: https://www.nseindia.com/api/NextApi/apiClient?functionName=getMarketStatistics
+6. market few stocks or marque data: https://www.nseindia.com/api/NextApi/apiClient?functionName=getMarqueData
+7. get current time: https://www.nseindia.com/api/NextApi/dynamicApi?functionName=getCurrentTime$0
+8. listing data: https://www.nseindia.com/api/NextApi/apiClient?functionName=getListingData$0
+9. 
+"""
+
 # Fetch data from NSE API
 import os
 import sys
 from pathlib import Path
+from datetime import (datetime, timedelta)
 import requests
 import pandas as pd
 import numpy as np
@@ -22,9 +46,12 @@ class NSE_API():
         self.nse_session.get(self.base_nse_url, headers=self.nse_headers,  timeout=10)
         self.nse_session.get(self.base_nse_url+"/option-chain", headers=self.nse_headers,  timeout=10)
 
-    def _get_data(self, api_url):
+    def _get_data(self, api_url, print_url=False):
         full_nse_api_url = self.base_nse_url + api_url
-        print(f"calling {full_nse_api_url} ..")
+
+        if print_url:
+            print(f"calling {full_nse_api_url} ..")
+
         output = dict()
         try:
             response = self.nse_session.get(full_nse_api_url)
@@ -145,13 +172,58 @@ def load_etf_data():
     return final_etf_df_new_filtered.reset_index(drop=True)
 
 
+def get_nse_market_status_daily():
+    out_dict = dict()
+    nse_api = NSE_API()
+    nse_market_status = nse_api._get_data('api/marketstatus')
+    # nse_market_status_df = pd.DataFrame(nse_market_status.get('marketState'))
+
+    out_dict['nifty50_close'] = nse_market_status.get('indicativenifty50').get('closingValue')
+    out_dict['nifty50_change'] = nse_market_status.get('indicativenifty50').get('change')
+    out_dict['nifty50_perchange'] = nse_market_status.get('indicativenifty50').get('perChange')
+    out_dict['nifty50_status'] = nse_market_status.get('indicativenifty50').get('status')
+    out_dict['giftnifty_close'] = nse_market_status.get('giftnifty').get('LASTPRICE')
+    out_dict['giftnifty_change'] = nse_market_status.get('giftnifty').get('DAYCHANGE')
+    out_dict['giftnifty_perchange'] = nse_market_status.get('giftnifty').get('PERCHANGE').strip()
+    out_dict['marketcapin_trdollars'] = nse_market_status.get('marketcap').get('marketCapinTRDollars')
+    out_dict['marketcapin_laccr_rupees'] = nse_market_status.get('marketcap').get('marketCapinLACCRRupees')
+    out_dict['as_of_date'] = nse_market_status.get('indicativenifty50').get('dateTime')
+    out_dict['current_date_time'] = nse_market_status.get('giftnifty').get('TIMESTMP')
+
+    nse_market_status_df = pd.DataFrame(out_dict, index=[0])
+    return nse_market_status_df
+
+
+def get_nse_index_daily():
+    nse_api = NSE_API()
+    nse_index_daily = nse_api._get_data('api/NextApi/apiClient?functionName=getIndexData&&type=All')
+    nse_index_daily_df = pd.DataFrame(nse_index_daily.get('data'))
+    nse_index_daily_df.drop(columns=['timeVal', 'constituents', 'indicativeClose', 'icChange', 'icPerChange', 'isConstituents'], inplace=True)
+    return nse_index_daily_df
+
+
+def get_nse_india_vix(from_dt: str=None, to_dt: str=None):
+    nse_api = NSE_API()
+    if from_dt and to_dt:
+        nse_india_vix = nse_api._get_data(f'api/historicalOR/vixhistory?from={from_dt}&to={to_dt}')
+    else:
+        from_dt =  (datetime.now() - timedelta(days=365)).strftime('%d-%m-%Y')
+        to_dt = datetime.now().strftime('%d-%m-%Y')
+        nse_india_vix = nse_api._get_data(f'api/historicalOR/vixhistory?from={from_dt}&to={to_dt}')
+    nse_india_vix_df = pd.DataFrame(nse_india_vix.get('data'))
+    return nse_india_vix_df
+
 
 if __name__ == '__main__':
     # out = get_nse_etf_data()
     # out = get_nse_etf_data(symbol='MODEFENCE')
 
     # out = get_nse_etf_data_ohlc(symbol='MODEFENCE')
-    out = get_nse_etf_data_ohlc(symbol='MODEFENCE', from_dt='17-11-2024', to_dt='17-11-2025')
+    # out = get_nse_etf_data_ohlc(symbol='MODEFENCE', from_dt='17-11-2024', to_dt='17-11-2025')
+
+    # out = get_nse_market_status_daily()
+    # out = get_nse_index_daily()
+    out = get_nse_india_vix()
 
     print(out)
 
