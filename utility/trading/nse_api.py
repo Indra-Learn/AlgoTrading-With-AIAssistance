@@ -199,6 +199,7 @@ def get_nse_index_daily():
     nse_index_daily = nse_api._get_data('api/NextApi/apiClient?functionName=getIndexData&&type=All')
     nse_index_daily_df = pd.DataFrame(nse_index_daily.get('data'))
     nse_index_daily_df.drop(columns=['timeVal', 'constituents', 'indicativeClose', 'icChange', 'icPerChange', 'isConstituents'], inplace=True)
+    nse_index_daily_df.rename(columns={'indexName': 'index_name', 'previousClose': 'previous_close', 'percChange': 'perchange', 'yearHigh': '52week_high', 'yearLow': '52week_low'}, inplace=True)
     return nse_index_daily_df
 
 
@@ -211,6 +212,8 @@ def get_nse_india_vix(from_dt: str=None, to_dt: str=None):
         to_dt = datetime.now().strftime('%d-%m-%Y')
         nse_india_vix = nse_api._get_data(f'api/historicalOR/vixhistory?from={from_dt}&to={to_dt}')
     nse_india_vix_df = pd.DataFrame(nse_india_vix.get('data'))
+    nse_india_vix_df.drop(columns=['EOD_INDEX_NAME'], inplace=True)
+    nse_india_vix_df.rename(columns={'EOD_TIMESTAMP': 'date', 'EOD_OPEN_INDEX_VAL': 'open',	'EOD_HIGH_INDEX_VAL': 'high', 'EOD_LOW_INDEX_VAL': 'low', 'EOD_CLOSE_INDEX_VAL': 'close', 'EOD_PREV_CLOSE': 'previous_close', 'VIX_PTS_CHG': 'pts_change', 'VIX_PERC_CHG': 'perchange'}, inplace=True)
     return nse_india_vix_df
 
 
