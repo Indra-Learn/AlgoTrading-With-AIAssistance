@@ -16,9 +16,13 @@
 4. market turnover summary: https://www.nseindia.com/api/NextApi/apiClient?functionName=getMarketTurnoverSummary
 5. market statistics: https://www.nseindia.com/api/NextApi/apiClient?functionName=getMarketStatistics
 6. market few stocks or marque data: https://www.nseindia.com/api/NextApi/apiClient?functionName=getMarqueData
-7. get current time: https://www.nseindia.com/api/NextApi/dynamicApi?functionName=getCurrentTime$0
+7. get current time: https://www.nseindia.com/api/NextApi/dynamicApi?functionName=getCurrentTime
 8. listing data: https://www.nseindia.com/api/NextApi/apiClient?functionName=getListingData$0
 9. 
+
+# format = '%Y-%m-%d%H:%M:%S'
+# df['Datetime'] = pd.to_datetime(df['date'] + df['time'].astype("string"), format=format)
+series_list = [series for col, series in df.items()]
 """
 
 # Fetch data from NSE API
@@ -207,14 +211,31 @@ def get_nse_india_vix(from_dt: str=None, to_dt: str=None):
     nse_api = NSE_API()
     if from_dt and to_dt:
         nse_india_vix = nse_api._get_data(f'api/historicalOR/vixhistory?from={from_dt}&to={to_dt}')
+        nse_india_vix_df = pd.DataFrame(nse_india_vix.get('data'))
     else:
-        from_dt =  (datetime.now() - timedelta(days=365)).strftime('%d-%m-%Y')
-        to_dt = datetime.now().strftime('%d-%m-%Y')
-        nse_india_vix = nse_api._get_data(f'api/historicalOR/vixhistory?from={from_dt}&to={to_dt}')
-    nse_india_vix_df = pd.DataFrame(nse_india_vix.get('data'))
+        df_list = list()
+        to_dt = datetime.now()
+        for i in range(12):
+            from_dt =  (to_dt - timedelta(days=30))
+            nse_india_vix = nse_api._get_data(f'api/historicalOR/vixhistory?from={from_dt.strftime("%d-%m-%Y")}&to={to_dt.strftime("%d-%m-%Y")}')
+            df_list.append(pd.DataFrame(nse_india_vix.get('data')))
+            to_dt = (from_dt - timedelta(days=1))
+        nse_india_vix_df = pd.concat(df_list[::-1], ignore_index=True)
+
+    # print(f"from: {from_dt} - to: {to_dt}")
+    # print(nse_india_vix_df.head(5))
+    # print(nse_india_vix_df.tail(5))
+
     nse_india_vix_df.drop(columns=['EOD_INDEX_NAME'], inplace=True)
     nse_india_vix_df.rename(columns={'EOD_TIMESTAMP': 'date', 'EOD_OPEN_INDEX_VAL': 'open',	'EOD_HIGH_INDEX_VAL': 'high', 'EOD_LOW_INDEX_VAL': 'low', 'EOD_CLOSE_INDEX_VAL': 'close', 'EOD_PREV_CLOSE': 'previous_close', 'VIX_PTS_CHG': 'pts_change', 'VIX_PERC_CHG': 'perchange'}, inplace=True)
+    # nse_india_vix_df.sort_values(by='date', ascending=True).reset_index(drop=True)
     return nse_india_vix_df
+
+
+def get_nse_date():
+    nse_api = NSE_API()
+    nse_current_date = nse_api._get_data('api/NextApi/dynamicApi?functionName=getCurrentTime').get('data').get('currentTime')
+    return nse_current_date
 
 
 if __name__ == '__main__':
@@ -226,7 +247,10 @@ if __name__ == '__main__':
 
     # out = get_nse_market_status_daily()
     # out = get_nse_index_daily()
-    out = get_nse_india_vix()
 
+    out = get_nse_india_vix()
+    # out = get_nse_india_vix(from_dt='22-11-2024', to_dt='18-11-2025')
+
+    # out = get_nse_date()
     print(out)
 
